@@ -6,6 +6,38 @@
 import { motion } from 'motion/react';
 import { Send, Phone, Mail, User, Instagram, BookOpen, BarChart3, TrendingUp, Target, ShieldCheck } from 'lucide-react';
 import { useState, FormEvent } from 'react';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from './lib/firebase';
+
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: any;
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: null,
+      email: null,
+    },
+    operationType,
+    path
+  };
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
 
 export default function App() {
   const [formData, setFormData] = useState({
@@ -14,11 +46,27 @@ export default function App() {
     email: '',
     mensagem: ''
   });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    console.log('Lead Captured:', formData);
-    alert('Recebemos seus dados! Um especialista entrará em contato para agendar sua consultoria.');
+    setIsSubmitting(true);
+
+    try {
+      const leadsPath = 'leads';
+      await addDoc(collection(db, leadsPath), {
+        ...formData,
+        createdAt: serverTimestamp()
+      });
+      
+      setFormData({ nome: '', telefone: '', email: '', mensagem: '' });
+      alert('Recebemos seus dados! Um especialista entrará em contato para agendar sua consultoria.');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'leads');
+      alert('Ocorreu um erro ao enviar seus dados. Por favor, tente novamente mais tarde.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -124,9 +172,10 @@ export default function App() {
               <motion.button 
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
-                className="w-full brand-gradient text-white font-bold py-4 rounded-xl flex items-center justify-center gap-3 text-lg shadow-[0_10px_20px_rgba(0,209,255,0.2)] transition-all hover:shadow-[0_10px_25px_rgba(0,209,255,0.4)]"
+                disabled={isSubmitting}
+                className={`w-full brand-gradient text-white font-bold py-4 rounded-xl flex items-center justify-center gap-3 text-lg shadow-[0_10px_20px_rgba(0,209,255,0.2)] transition-all hover:shadow-[0_10px_25px_rgba(0,209,255,0.4)] ${isSubmitting ? 'opacity-70 cursor-not-allowed' : ''}`}
               >
-                Solicitar Consultoria <Send className="w-5 h-5" />
+                {isSubmitting ? 'Enviando...' : 'Solicitar Consultoria'} <Send className="w-5 h-5" />
               </motion.button>
               
               <div className="flex items-center justify-center gap-2 pt-2 text-[10px] text-gray-500 uppercase tracking-widest font-semibold">
